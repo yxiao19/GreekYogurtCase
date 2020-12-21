@@ -1,0 +1,143 @@
+---
+title: "Team A MSMA Greek Yogurt Case"
+author: "Jiakang Chen, Chengyu Jiang, Jade Sinskul, Yun Xiao"
+date: "11/9/2020"
+output: html_document
+---
+
+### Read the data
+```{r}
+library(foreign)
+library(haven)
+library(devtools)
+library(usethis)
+library(devtools)
+library(ggplot2)
+library(ggbiplot)
+library(dplyr)
+library(psych)
+library(stargazer)
+df <- read_sav("Desktop/Wegmans Survey (1).sav")
+```
+
+### Principle Component Analysis of Question 6 vs Cook
+#### Ratings of importance of the attributes when purchasing Greek Yogurt
+
+
+```{r}
+Q6 <- df[47:59] #subset the questions 6
+#View(Q6)
+Q6names <- names(Q6) #extract column names of question 6
+complete.obs <- apply(!is.na(df[,Q6names]),1,all) #find rows with missing values in question 6
+table(complete.obs) 
+dfnew <- df[complete.obs==TRUE,] #dfnew is a dataframe that contains all the rows that have no missing values in questions 6
+```
+
+After removing the missing values, 135 rows are removed. Now there are 940 rows. But we are uncertain of whether the 'dfnew' (sample) are representative of the whole data (population). So we did three Chi-square tests and a correlation difference calculation to test whether the sample is representative.
+
+We did Chi-square tests to compare based on gender, cook/snack, and age.
+
+```{r}
+#Gender
+popGender<-c(0.1,0.89,0.01)
+table(dfnew$Question33Areyou)
+sapGender<-c(94/939,836/939,9/939)
+chisq.test(sapGender,p=popGender) 
+
+#Cook
+popCook <- c(0.49,0.51)
+table(dfnew$Question12DoyouuseGreekYogurtforcooking)
+sampCook <- c(452/939,487/939)
+chisq.test(sampCook,p=popCook)
+
+#Age
+popAge <- c(0.015,0.132,0.227,0.276,0.247,0.088,0.015)
+table(dfnew$Question32Forclassificationpurposesonlypleaseindicatewhichagegro)
+sampAge <- c(15/939,125/939,215/939,262/939,229/939,79/939,15/939)
+chisq.test(sampAge,p=popAge)
+```
+
+All the three p-values are close to 1, so we can conclude that the sample is not different from the population.
+
+```{r}
+#Correlation differences
+cor1 <- cor(df[,Q6names],use='complete.obs')
+#stargazer(cor1,type='text')
+Q6Complete <- df[complete.obs,Q6names]
+cor2 <- cor(Q6Complete)
+sum(cor1==cor2)/length(cor1)
+cor3 <- cor(df[,Q6names],use='pairwise.complete.obs')
+sum(abs(cor2-cor3)<0.05)/length(cor1)
+sum(abs(cor2-cor3)<0.1)/length(cor1)
+```
+
+Cor 1 and cor 2 give the same answer. Cor3 has slightly different numbers. But the missing data does not affect the overall relationships.
+
+```{r}
+df1 <- dfnew #assign dfnew to a new dataframe called df1
+df1$Cook <- ifelse(dfnew$Question12DoyouuseGreekYogurtforcooking=='Yes',1,0) #assign 1 to Cook and 0 to snack
+complete.obsCook <- complete.obs&!is.na(df1$Cook)
+complete.obsAll <- complete.obsCook
+resultPCA <- prcomp(~.,data=df[complete.obsAll,Q6names],scale.=TRUE,na.action=na.omit)
+ggscreeplot(resultPCA) #Elboe rule, we select '6'
+```
+```{r}
+stargazer(resultPCA$rotation[,1:6],type='text')#select 6 PCs
+ggbiplot(resultPCA,alpha=.1,ellipse = TRUE)
+df1 <- dfnew#assign dfnew to a new dataframe called df1
+df1$Cook <- ifelse(dfnew$Question12DoyouuseGreekYogurtforcooking=='Yes',1,0)#assign 1 to Cook and 0 to snack
+
+#Plot PCs with cook/snack
+gg1<-ggbiplot(resultPCA,alpha=.4,group=df1$Cook,choices = c(1,2),ellipse = T,ellipse.prob = .1)
+#View(df1)
+gg1
+
+gg2<-ggbiplot(resultPCA,alpha=.4,group=df1$Cook,choices = c(1,3),ellipse = T,ellipse.prob = .1)
+gg2
+
+gg3<-ggbiplot(resultPCA,alpha=.4,group=df1$Cook,choices = c(1,4),ellipse = T,ellipse.prob = .1)
+gg3
+
+gg4<-ggbiplot(resultPCA,alpha=.4,group=df1$Cook,choices = c(1,5),ellipse = T,ellipse.prob = .1)
+gg4
+
+gg5<-ggbiplot(resultPCA,alpha=.4,group=df1$Cook,choices = c(1,6),ellipse = T,ellipse.prob = .1)
+gg5
+
+```
+
+### Perceptional Map of Chobani, Oikos, Foge
+
+```{r}
+fage <- df[102:110] #subset rating questions of fage
+chobani <- df[114:122] #subset rating questions of chobani
+oikos <- df[126:135] #subset rating questions of fage #chobani
+
+colnames(chobani)<-c('Allnatural','Calorielevel','Consistency','Fatlevel','Fruitonthebottom','Price','Proteinlevel','Taste','Texture')
+colnames(oikos)<-c('Allnatural','Calorielevel','Consistency','Fatlevel','Fruitonthebottom','Organic','Price','Proteinlevel','Taste','Texture')
+colnames(fage)<-c('Allnatural','Calorielevel','Consistency','Fatlevel','Price','Proteinlevel','Sidebysidecup','Taste','Texture') 
+fage$brand <- 'fage'
+chobani$brand <- 'chobani'
+oikos$brand <- 'oikos'
+df2<-merge(x=fage,y=chobani,all=T) #df2 contains all fage and chobani ratings and the brand names
+#View(df2)
+df3<-merge(x=df2,y=oikos,all=T) #df3 contains all the three brand names and ratings
+#View(df3)
+
+rating.sc<-df3
+rating.sc[,-9]<-scale(df3[,-9]) #only take the ratings
+brand.mean <- aggregate(rating.sc[,-9],list(rating.sc[,9]),mean,na.rm=T) #calculate the mean of ratings of each attribute of each brand
+brand.mean
+
+rownames(brand.mean)<-c('chobani','fage','oikos') #change rownames to brand names
+brand.mean<-brand.mean[,-1] #remove uneccessary data
+brand.mean<-brand.mean[,1:8] #only keep the columns with no zeros
+rating.pc<-prcomp(brand.mean,scale=T) #conduct the perceptional map
+summary(rating.pc) #We can see PC1 and PC2 tell most the the variances 
+plot(rating.pc,type='l') #elbow rule, we take 2 PCs
+biplot(rating.pc,cex=c(1,0.9)) #draw the map
+abline(h=0)
+abline(v=0)
+
+```
+
